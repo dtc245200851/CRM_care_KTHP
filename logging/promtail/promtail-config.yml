@@ -1,0 +1,48 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Nginx Access and Error Logs
+  - job_name: nginx
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: nginx
+          app: crm-care
+          __path__: /var/log/nginx/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            remote_addr: remote_addr
+            status: status
+            request: request
+            request_time: request_time
+      - labels:
+          status:
+          request:
+
+  # Backend App Logs
+  - job_name: backend
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: backend
+          app: crm-backend
+          __path__: /var/log/backend/*.log
+    pipeline_stages:
+      - multiline:
+          firstline: '^\d{4}-\d{2}-\d{2}'
+          max_wait_time: 3s
+      - regex:
+          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z) \[(?P<level>\w+)\]: (?P<message>.*)$'
+      - labels:
+          level:
