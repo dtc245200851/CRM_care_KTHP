@@ -1,0 +1,126 @@
+name: crm-care
+
+networks:
+  crm-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: crm_postgres_data
+  pgadmin_data:
+    name: crm_pgadmin_data
+  nginx_logs:
+    name: crm_nginx_logs
+  backend_logs:
+    name: crm_backend_logs
+
+services:
+  # ─── 1. PostgreSQL Database ───────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: crm_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-crm_care}
+      POSTGRES_USER: ${POSTGRES_USER:-crm_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CrmSecureP@ss2024!}
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - crm-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crm_user} -d ${POSTGRES_DB:-crm_care}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ─── 2. pgAdmin 4 Management Interface ────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:8.5
+    container_name: crm_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@crmcare.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-PgAdm1n@SecureP@ss2024!}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "5051:80"
+    networks:
+      - crm-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ─── 3. CRM Backend API ────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: crm_backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-5000}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://crm_user:CrmSecureP@ss2024!@postgres:5432/crm_care?schema=public}
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-min-32-chars}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - backend_logs:/app/logs
+    ports:
+      - "5000:5000"
+    networks:
+      - crm-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ─── 4. CRM Frontend SPA ───────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: crm_frontend
+    restart: unless-stopped
+    networks:
+      - crm-network
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ─── 5. Nginx Reverse Proxy (Cổng vào duy nhất có Security Headers) ───────────
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: crm_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - nginx_logs:/var/log/nginx
+    networks:
+      - crm-network
+    depends_on:
+      - frontend
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/nginx_status || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

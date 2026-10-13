@@ -1,0 +1,30 @@
+{
+  "name": "crm-care-root",
+  "version": "1.0.0",
+  "description": "CRM Care - Customer Relationship Management System (Đề 4 KTHP)",
+  "scripts": {
+    "start": "powershell -ExecutionPolicy Bypass -File ./start.ps1",
+    "start:sh": "bash ./start.sh",
+    "up": "docker compose up -d --build",
+    "down": "docker compose down",
+    "seed": "powershell -ExecutionPolicy Bypass -File ./scripts/init-db.ps1",
+    "seed:sh": "bash ./scripts/init-db.sh",
+    "backup": "powershell -ExecutionPolicy Bypass -File ./scripts/backup.ps1",
+    "backup:sh": "bash ./scripts/backup.sh",
+    "health": "powershell -ExecutionPolicy Bypass -File ./scripts/health-check.ps1",
+    "health:sh": "bash ./scripts/health-check.sh"
+  },
+  "keywords": [
+    "crm",
+    "crm-care",
+    "docker",
+    "prometheus",
+    "grafana",
+    "loki",
+    "react",
+    "nodejs",
+    "postgresql"
+  ],
+  "author": "dtc245200851",
+  "license": "ISC"
+}

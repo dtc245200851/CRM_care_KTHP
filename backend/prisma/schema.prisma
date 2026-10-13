@@ -1,0 +1,129 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  PROSPECT
+  CHURNED
+}
+
+enum CustomerSource {
+  WEBSITE
+  REFERRAL
+  SOCIAL_MEDIA
+  EMAIL_CAMPAIGN
+  COLD_CALL
+  EVENT
+  OTHER
+}
+
+enum InteractionType {
+  CALL
+  EMAIL
+  MEETING
+  SUPPORT
+  OTHER
+}
+
+enum InteractionStatus {
+  PLANNED
+  COMPLETED
+  CANCELLED
+  FOLLOW_UP
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         UserRole  @default(STAFF)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  interactions Interaction[]
+
+  @@map("users")
+}
+
+model Customer {
+  id           String         @id @default(cuid())
+  customerCode String         @unique @map("customer_code")
+  name         String
+  email        String?        @unique
+  phone        String?
+  company      String?
+  address      String?
+  status       CustomerStatus @default(PROSPECT)
+  source       CustomerSource @default(OTHER)
+  notes        String?
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  contacts     Contact[]
+  interactions Interaction[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([name])
+  @@map("customers")
+}
+
+model Contact {
+  id         String   @id @default(cuid())
+  customerId String   @map("customer_id")
+  name       String
+  email      String?
+  phone      String?
+  position   String?
+  department String?
+  notes      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  interactions Interaction[]
+
+  @@index([customerId])
+  @@map("contacts")
+}
+
+model Interaction {
+  id              String            @id @default(cuid())
+  customerId      String            @map("customer_id")
+  contactId       String?           @map("contact_id")
+  userId          String            @map("user_id")
+  interactionType InteractionType   @map("interaction_type")
+  title           String
+  content         String?
+  interactionDate DateTime          @map("interaction_date")
+  status          InteractionStatus @default(PLANNED)
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  customer Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  contact  Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([customerId])
+  @@index([userId])
+  @@index([interactionDate])
+  @@index([interactionType])
+  @@map("interactions")
+}
