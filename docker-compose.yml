@@ -13,6 +13,10 @@ volumes:
     name: crm_nginx_logs
   backend_logs:
     name: crm_backend_logs
+  prometheus_data:
+    name: crm_prometheus_data
+  grafana_data:
+    name: crm_grafana_data
 
 services:
   # ─── 1. PostgreSQL Database ───────────────────────────────────────────────────
@@ -102,7 +106,7 @@ services:
       backend:
         condition: service_healthy
 
-  # ─── 5. Nginx Reverse Proxy (Cổng vào duy nhất có Security Headers) ───────────
+  # ─── 5. Nginx Reverse Proxy ───────────────────────────────────────────────────
   nginx:
     image: nginx:1.25-alpine
     container_name: crm_nginx
@@ -124,3 +128,91 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  # ─── 6. Prometheus Monitoring Server ───────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: crm_prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9091:9090"
+    networks:
+      - crm-network
+    depends_on:
+      - backend
+      - nginx
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ─── 7. Grafana Dashboard & Visualization ───────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: crm_grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-Gr@fana@SecureP@ss2024!}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/crm-overview.json
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - crm-network
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ─── 8. Postgres Exporter ───────────────────────────────────────────────────
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: crm_postgres_exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://crm_monitor:MonitorSecure2024!@postgres:5432/crm_care?sslmode=disable"
+    networks:
+      - crm-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ─── 9. Nginx Prometheus Exporter ───────────────────────────────────────────
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.1.0
+    container_name: crm_nginx_exporter
+    restart: unless-stopped
+    command:
+      - -nginx.scrape-uri=http://nginx:80/nginx_status
+    networks:
+      - crm-network
+    depends_on:
+      - nginx
+
+  # ─── 10. Node Exporter (Host System Metrics) ────────────────────────────────
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: crm_node_exporter
+    restart: unless-stopped
+    networks:
+      - crm-network

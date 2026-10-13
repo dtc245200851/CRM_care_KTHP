@@ -1,0 +1,147 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "Tổng quan Hệ thống CRM Care",
+      "type": "row"
+    },
+    {
+      "id": 1,
+      "title": "API Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[1m])) by (status)",
+          "legendFormat": "Status {{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth" },
+          "unit": "reqps"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "API Latency (p95 & Median)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95 Latency"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "Median Latency"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth" },
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "id": 101,
+      "title": "Cơ sở dữ liệu PostgreSQL & Kết nối",
+      "type": "row"
+    },
+    {
+      "id": 3,
+      "title": "PostgreSQL Active Connections",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 10 },
+      "targets": [
+        {
+          "expr": "sum(pg_stat_activity_count{state=\"active\"})",
+          "legendFormat": "Active Connections"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 20 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "PostgreSQL Transactions / sec",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 9, "x": 6, "y": 10 },
+      "targets": [
+        {
+          "expr": "sum(rate(pg_stat_database_xact_commit{datname=\"crm_care\"}[1m]))",
+          "legendFormat": "Commits/s"
+        },
+        {
+          "expr": "sum(rate(pg_stat_database_xact_rollback{datname=\"crm_care\"}[1m]))",
+          "legendFormat": "Rollbacks/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line" },
+          "unit": "ops"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Nginx Active Connections",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 9, "x": 15, "y": 10 },
+      "targets": [
+        {
+          "expr": "nginx_connections_active",
+          "legendFormat": "Active Connections"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 100 },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["crm", "production", "monitoring"],
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": { "refresh_intervals": ["5s", "10s", "30s", "1m"] },
+  "timezone": "browser",
+  "title": "CRM Care - Dashboard Giám Sát Toàn Diện",
+  "uid": "crm-care-overview",
+  "version": 1
+}

@@ -1,0 +1,120 @@
+name: crm-care-monitoring
+
+networks:
+  crm-network:
+    name: crm-care_crm-network
+    external: true
+
+volumes:
+  prometheus_data:
+    name: crm_prometheus_data
+  grafana_data:
+    name: crm_grafana_data
+  loki_data:
+    name: crm_loki_data
+  nginx_logs:
+    name: crm_nginx_logs
+    external: true
+  backend_logs:
+    name: crm_backend_logs
+    external: true
+
+services:
+  # ─── Prometheus Monitoring Server ──────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: crm_prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9091:9090"
+    networks:
+      - crm-network
+
+  # ─── Grafana Dashboard & Visualization ─────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: crm_grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GF_SECURITY_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-Gr@fana@SecureP@ss2024!}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: "/var/lib/grafana/dashboards/crm-overview.json"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - crm-network
+    depends_on:
+      - prometheus
+
+  # ─── PostgreSQL Prometheus Exporter ────────────────────────────────────────
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: crm_postgres_exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: ${DATA_SOURCE_NAME:-postgresql://crm_user:CrmCare@SecureP@ss2024!@postgres:5432/crm_care?sslmode=disable}
+    networks:
+      - crm-network
+
+  # ─── Nginx Prometheus Exporter ─────────────────────────────────────────────
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.1.0
+    container_name: crm_nginx_exporter
+    restart: unless-stopped
+    command:
+      - -nginx.scrape-uri=http://nginx:80/nginx_status
+    networks:
+      - crm-network
+
+  # ─── Node Exporter (Host System Metrics) ───────────────────────────────────
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: crm_node_exporter
+    restart: unless-stopped
+    networks:
+      - crm-network
+
+  # ─── Loki Log Aggregator ───────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: crm_loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./logging/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "3101:3100"
+    networks:
+      - crm-network
+
+  # ─── Promtail Log Shipper ──────────────────────────────────────────────────
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: crm_promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./logging/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - nginx_logs:/var/log/nginx:ro
+      - backend_logs:/var/log/backend:ro
+    networks:
+      - crm-network
+    depends_on:
+      - loki
